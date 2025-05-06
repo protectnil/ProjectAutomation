@@ -36,7 +36,7 @@ function computeEstimatedCost(size, risk) {
     }
 
     const estimate = costTableRow[riskKey];
-    console.log(`EstimatedCostInDays[${sizeKey}][${riskKey}]: '${estimate}'`);
+    // console.log(`EstimatedCostInDays[${sizeKey}][${riskKey}]: '${estimate}'`);
     return estimate;
 }
 
@@ -236,8 +236,8 @@ async function main() {
             const size = fields.find(f => f.field?.name.toLowerCase() === "size")?.name;
             const risk = fields.find(f => f.field?.name.toLowerCase() === "risk")?.name;
 
-            console.log(`Size='${size ?? "<unspecified>"}'.`);
-            console.log(`Risk='${risk ?? "<unspecified>"}'.`);
+            console.log(`Size = '${size ?? "<unspecified>"}'.`);
+            console.log(`Risk = '${risk ?? "<unspecified>"}'.`);
 
             if (!size) {
                 console.log("Skipping item: missing Size.");
@@ -250,15 +250,15 @@ async function main() {
             }
 
             const estimate = computeEstimatedCost(size, risk);
+            console.log(`Computed Estimate ='${estimate ?? "<not available>"}'.`);
 
             const existingEstimate = fields.find(f => f.field?.name.toLowerCase() === "estimation hack")?.number;
-            const isUpdateNeeded = (existingEstimate === estimate);
-
             console.log(`Exiting Estimate  ='${existingEstimate ?? "<not available>"}'.`);
-            console.log(`Computed Estimate ='${estimate ?? "<not available>"}'.`);
+
+            const isUpdateNeeded = (existingEstimate !== estimate);
             console.log(`Is Update Needed  ='${isUpdateNeeded}'.`);
 
-            if (isUpdateNeeded) {
+            if (!isUpdateNeeded) {
                 console.log("Skipping update.");
                 continue;
             }
