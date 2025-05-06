@@ -250,13 +250,13 @@ async function main() {
             }
 
             const estimate = computeEstimatedCost(size, risk);
-            console.log(`Computed Estimate ='${estimate ?? "<not available>"}'.`);
+            console.log(`Computed Estimate = '${estimate ?? "<not available>"}'.`);
 
             const existingEstimate = fields.find(f => f.field?.name.toLowerCase() === "estimation hack")?.number;
-            console.log(`Exiting Estimate  ='${existingEstimate ?? "<not available>"}'.`);
+            console.log(`Exiting Estimate  = '${existingEstimate ?? "<not available>"}'.`);
 
             const isUpdateNeeded = (existingEstimate !== estimate);
-            console.log(`Is Update Needed  ='${isUpdateNeeded}'.`);
+            console.log(`Is Update Needed  = '${isUpdateNeeded}'.`);
 
             if (!isUpdateNeeded) {
                 console.log("Skipping update.");
