@@ -78,13 +78,20 @@ async function graphql(query, variables = {}) {
 
 async function getFieldIds() {
     const query = `
-        query($org: String!, $projectId: ID!) {
+        query($org: String!, $projectNumber: Int!) {
             organization(login: $org) {
-                projectV2(id: $projectId) {
+                projectV2(number: $projectNumber) {
+                    id
                     fields(first: 100) {
                         nodes {
-                            id
-                            name
+                            ... on ProjectV2SingleSelectField {
+                                id
+                                name
+                            }
+                            ... on ProjectV2NumberField {
+                                id
+                                name
+                            }
                         }
                     }
                 }
@@ -92,9 +99,11 @@ async function getFieldIds() {
         }
     `;
 
+    const projectNumber = parseInt(GH_PROJECT_ID, 10);
+
     const data = await graphql(query, {
         org: GH_ORG_NAME,
-        projectId: GH_PROJECT_ID,
+        projectNumber
     });
 
     const fields = data.data.organization.projectV2.fields.nodes;
@@ -105,12 +114,13 @@ async function getFieldIds() {
         return field.id;
     };
 
-    return {        
+    return {
         estimationHackFieldId: getFieldIdByName("Estimation Hack"),
+        projectId: data.data.organization.projectV2.id
     };
 }
 
-async function getProjectItems() {
+async function getProjectItems(projectId) {
     const query = `
         query($projectId: ID!, $cursor: String) {
             node(id: $projectId) {
@@ -158,7 +168,7 @@ async function getProjectItems() {
 
     while (hasNextPage) {
         const variables = {
-            projectId: GH_PROJECT_ID,
+            projectId: projectId,
             cursor: cursor,
         };
 
@@ -173,7 +183,7 @@ async function getProjectItems() {
     return items;
 }
 
-async function updateEstimationHack(itemId, fieldId, value) {
+async function updateEstimationHack(projectId, itemId, fieldId, value) {
     const mutation = `
         mutation($input: UpdateProjectV2ItemFieldValueInput!) {
             updateProjectV2ItemFieldValue(input: $input) {
@@ -186,7 +196,7 @@ async function updateEstimationHack(itemId, fieldId, value) {
 
     await graphql(mutation, {
         input: {
-            projectId: GH_PROJECT_ID,
+            projectId,
             itemId,
             fieldId,
             value: {
@@ -197,30 +207,56 @@ async function updateEstimationHack(itemId, fieldId, value) {
 }
 
 async function main() {
-    const { estimationHackFieldId } = await getFieldIds();
+    const { estimationHackFieldId, projectId } = await getFieldIds();
 
-    const items = await getProjectItems();
+    const items = await getProjectItems(projectId);
 
+    let countTotalItems = 0;
+    let countChangedItems = 0;
+    let countErrItems = 0;
     for (const item of items) {
-        const fields = item.fieldValues.nodes;
 
-        const size = fields.find(f => f.field?.name === "Size")?.name;
-        const risk = fields.find(f => f.field?.name === "Risk")?.name;
+        try {
+            countTotalItems++;
+            const title = item.content?.title || "(no title)";
 
-        if (!size) {
-            console.log(`Skipping item (missing Size): id='${item.id}', title="${title}".`);
-            continue;
+            const fields = item.fieldValues.nodes ?? [];
+
+            const size = fields.find(f => f.field?.name.toLowerCase() === "size")?.name;
+            const risk = fields.find(f => f.field?.name.toLowerCase() === "risk")?.name;
+
+            if (!size) {
+                console.log(`Skipping item (missing Size): id='${item.id}', title="${title}".`);
+                continue;
+            }
+
+            if (!risk) {
+                console.log(`Skipping item (missing Risk): id='${item.id}', title="${title}".`);
+                continue;
+            }
+
+            const estimate = computeEstimatedCost(size, risk);
+
+            const existingEstimate = fields.find(f => f.field?.name.toLowerCase() === "estimation hack")?.number;
+            if (existingEstimate === estimate) {
+                console.log(`Estimation Hack unchanged (${estimate}), no update required: id='${item.id}', title="${title}".`);
+                continue;
+            }
+
+            await updateEstimationHack(projectId, item.id, estimationHackFieldId, estimate);
+            countChangedItems++;
+            console.log(`Updated item Estimation Hack '${estimate}': id='${item.id}', title="${title}".`);
+            
+        } catch(err) {
+            countErrItems++;
+            console.log(`Error processing item id='${item.id}', title="${title}": "${err.message ?? err}"`);
         }
-
-        if (!risk) {
-            console.log(`Skipping item (missing Risk): id='${item.id}', title="${title}".`);
-            continue;
-        }
-
-        const estimate = computeEstimatedCost(size, risk);
-        console.log(`Updating item Estimation Hack '${estimate}': id='${item.id}', title="${title}".`);
-        await updateEstimationHack(item.id, estimationHackFieldId, estimate);
     }
+
+    console.log(`Finished.`
+        + ` countTotalItems='${countTotalItems}';`
+        + ` countChangedItems='${countChangedItems}';`
+        + ` countErrItems='${countErrItems}'`);
 }
 
 main().catch(err => {

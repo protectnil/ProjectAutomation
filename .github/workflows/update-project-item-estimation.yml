@@ -1,4 +1,4 @@
-name: Update Project Fields
+name: Update Project Work Estimations
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  update:
+  update_estimates:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
