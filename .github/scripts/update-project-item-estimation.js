@@ -146,12 +146,20 @@ async function getProjectItems(projectId) {
                             fieldValues(first: 50) {
                                 nodes {
                                     ... on ProjectV2ItemFieldSingleSelectValue {
-                                        field { name }
                                         name
+                                        field {
+                                            ... on ProjectV2FieldCommon {
+                                                name
+                                            }
+                                        }
                                     }
                                     ... on ProjectV2ItemFieldNumberValue {
-                                        field { name }
                                         number
+                                        field {
+                                            ... on ProjectV2FieldCommon {
+                                                name
+                                            }
+                                        }
                                     }
                                 }
                             }
