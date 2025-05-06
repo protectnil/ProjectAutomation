@@ -1,0 +1,229 @@
+
+function EstimatedCostTableRow(low, mid, high, severe) {
+    return {
+        ["LOW"]: low,
+        ["MID"]: mid, 
+        ["HIGH"]: high,
+        ["SEVERE"]: severe
+    };
+}
+
+const EstimatedCostInDays = {
+
+    ["XS"]: EstimatedCostTableRow(  0.5,   1,   1.5,   4),
+    ["S"]:  EstimatedCostTableRow(  2,     3,   4.5,  12),
+    ["M"]:  EstimatedCostTableRow(  4,     5,   7.5,  20),
+    ["L"]:  EstimatedCostTableRow(  7.5,  10,  15,    40),
+    ["XL"]: EstimatedCostTableRow( 15,    20,  30,    80),
+};
+
+function computeEstimatedCost(size, risk) {
+    const sizeKey = size?.split('(')[0].trim().toUpperCase();
+    const riskKey = risk?.split(':')[0].trim().toUpperCase();
+
+    if (!(sizeKey in EstimatedCostInDays)) {
+        const errMsg = `Invalid Size specifier: original value: "${size}"; key: "${sizeKey}".`;
+        console.log(errMsg);
+        throw new Error(errMsg);
+    }
+
+    const costTableRow = EstimatedCostInDays[sizeKey];
+
+    if (!(riskKey in costTableRow)) {
+        const errMsg = `Invalid Risk specifier: original value: "${risk}"; key: "${riskKey}".`;
+        console.log(errMsg);
+        throw new Error(errMsg);
+    }
+
+    const estimate = costTableRow[riskKey];
+    console.log(`EstimatedCostInDays[${sizeKey}][${riskKey}]: '${estimate}'`);
+    return estimate;
+}
+
+const axios = require('axios');
+
+const TOKEN_PROJECT_ACCESS = process.env.TOKEN_PROJECT_ACCSS_RW;
+const GH_ORG_NAME = process.env.PROJECT_ID_ENGINEERINGV2;
+const GH_PROJECT_ID = process.env.GH_PROJECT_ID;
+
+if (!TOKEN_PROJECT_ACCESS) {
+    throw new Error("`TOKEN_PROJECT_ACCESS` is missing.");
+}
+
+if (!GH_ORG_NAME) {
+    throw new Error("`GH_ORG_NAME` is missing.");
+}
+
+if (!GH_PROJECT_ID) {
+    throw new Error("`GH_PROJECT_ID` is missing.");
+}
+
+async function graphql(query, variables = {}) {
+    const res = await axios.post(
+        'https://api.github.com/graphql',
+        { query, variables },
+        {
+            headers: {
+                Authorization: `Bearer ${TOKEN_PROJECT_ACCESS}`,
+                'Content-Type': 'application/json',
+            },
+        }
+    );
+    if (res.data.errors) {
+        console.error(JSON.stringify(res.data.errors, null, 2));
+        throw new Error("GraphQL error");
+    }
+    return res.data;
+};
+
+async function getFieldIds() {
+    const query = `
+        query($org: String!, $projectId: ID!) {
+            organization(login: $org) {
+                projectV2(id: $projectId) {
+                    fields(first: 100) {
+                        nodes {
+                            id
+                            name
+                        }
+                    }
+                }
+            }
+        }
+    `;
+
+    const data = await graphql(query, {
+        org: GH_ORG_NAME,
+        projectId: GH_PROJECT_ID,
+    });
+
+    const fields = data.data.organization.projectV2.fields.nodes;
+
+    const getFieldIdByName = (name) => {
+        const field = fields.find(f => f.name.toLowerCase() === name.toLowerCase());
+        if (!field) throw new Error(`Field "${name}" not found`);
+        return field.id;
+    };
+
+    return {        
+        estimationHackFieldId: getFieldIdByName("Estimation Hack"),
+    };
+}
+
+async function getProjectItems() {
+    const query = `
+        query($projectId: ID!, $cursor: String) {
+            node(id: $projectId) {
+                ... on ProjectV2 {
+                    items(first: 100, after: $cursor) {
+                        pageInfo {
+                            hasNextPage
+                            endCursor
+                        }
+                        nodes {
+                            id
+                            content {
+                                ... on DraftIssue {
+                                    title
+                                }
+                                ... on Issue {
+                                    title
+                                }
+                                ... on PullRequest {
+                                    title
+                                }
+                            }
+                            fieldValues(first: 50) {
+                                nodes {
+                                    ... on ProjectV2ItemFieldSingleSelectValue {
+                                        field { name }
+                                        name
+                                    }
+                                    ... on ProjectV2ItemFieldNumberValue {
+                                        field { name }
+                                        number
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    `;
+
+    let items = [];
+    let hasNextPage = true;
+    let cursor = null;
+
+    while (hasNextPage) {
+        const variables = {
+            projectId: GH_PROJECT_ID,
+            cursor: cursor,
+        };
+
+        const data = await graphql(query, variables);
+        const page = data.data.node.items;
+
+        items.push(...page.nodes);
+        hasNextPage = page.pageInfo.hasNextPage;
+        cursor = page.pageInfo.endCursor;
+    }
+
+    return items;
+}
+
+async function updateEstimationHack(itemId, fieldId, value) {
+    const mutation = `
+        mutation($input: UpdateProjectV2ItemFieldValueInput!) {
+            updateProjectV2ItemFieldValue(input: $input) {
+                projectV2Item {
+                    id
+                }
+            }
+        }
+    `;
+
+    await graphql(mutation, {
+        input: {
+            projectId: GH_PROJECT_ID,
+            itemId,
+            fieldId,
+            value: {
+                number: value
+            }
+        }
+    });
+}
+
+async function main() {
+    const { estimationHackFieldId } = await getFieldIds();
+
+    const items = await getProjectItems();
+
+    for (const item of items) {
+        const fields = item.fieldValues.nodes;
+
+        const size = fields.find(f => f.field?.name === "Size")?.name;
+        const risk = fields.find(f => f.field?.name === "Risk")?.name;
+
+        if (!size) {
+            console.log(`Skipping item (missing Size): id='${item.id}', title="${title}".`);
+            continue;
+        }
+
+        if (!risk) {
+            console.log(`Skipping item (missing Risk): id='${item.id}', title="${title}".`);
+            continue;
+        }
+
+        const estimate = computeEstimatedCost(size, risk);
+        console.log(`Updating item Estimation Hack '${estimate}': id='${item.id}', title="${title}".`);
+        await updateEstimationHack(item.id, estimationHackFieldId, estimate);
+    }
+}
+
+main().catch(err => {
+    console.error("Script failed:", err);
+    process.exit(1);
+});

@@ -1,0 +1,26 @@
+name: Update Project Fields
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Every 5 minutes
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4        
+
+      - name: Install dependencies
+        run: npm install axios
+
+      - name: Run update script
+        env:
+          TOKEN_PROJECT_ACCESS_RW: ${{ secrets.TOKEN_PROJECT_ACCESS_RW }}
+          GH_ORG_NAME: ${{ vars.ORG_NAME }}
+          GH_PROJECT_ID: ${{ vars.PROJECT_ID_ENGINEERINGV2 }}
+        run: node scripts/update-fields.js
