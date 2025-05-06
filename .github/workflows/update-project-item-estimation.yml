@@ -23,4 +23,4 @@ jobs:
           TOKEN_PROJECT_ACCESS_RW: ${{ secrets.TOKEN_PROJECT_ACCESS_RW }}
           GH_ORG_NAME: ${{ vars.ORG_NAME }}
           GH_PROJECT_ID: ${{ vars.PROJECT_ID_ENGINEERINGV2 }}
-        run: node scripts/update-fields.js
+        run: node .github/scripts/update-project-item-estimation.js
