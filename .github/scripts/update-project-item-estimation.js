@@ -42,7 +42,7 @@ function computeEstimatedCost(size, risk) {
 
 const axios = require('axios');
 
-const TOKEN_PROJECT_ACCESS = process.env.TOKEN_PROJECT_ACCSS_RW;
+const TOKEN_PROJECT_ACCESS = process.env.TOKEN_PROJECT_ACCESS_RW;
 const GH_ORG_NAME = process.env.PROJECT_ID_ENGINEERINGV2;
 const GH_PROJECT_ID = process.env.GH_PROJECT_ID;
 
