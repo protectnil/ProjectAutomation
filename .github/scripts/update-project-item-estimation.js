@@ -88,7 +88,7 @@ async function getFieldIds() {
                                 id
                                 name
                             }
-                            ... on ProjectV2NumberField {
+                            ... on ProjectV2FieldCommon {
                                 id
                                 name
                             }
