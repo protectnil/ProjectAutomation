@@ -226,45 +226,59 @@ async function main() {
 
         try {
             countTotalItems++;
-            const title = item.content?.title || "(no title)";
+            const title = item.content?.title || "<no title>";
+
+            console.log("\n===========-===========-===========-===========-===========");
+            console.log(`Item #${countTotalItems}: id='${item.id}', title="${title}".`);
 
             const fields = item.fieldValues.nodes ?? [];
 
             const size = fields.find(f => f.field?.name.toLowerCase() === "size")?.name;
             const risk = fields.find(f => f.field?.name.toLowerCase() === "risk")?.name;
 
+            console.log(`Size='${size ?? "<unspecified>"}'.`);
+            console.log(`Risk='${risk ?? "<unspecified>"}'.`);
+
             if (!size) {
-                console.log(`Skipping item (missing Size): id='${item.id}', title="${title}".`);
+                console.log("Skipping item: missing Size.");
                 continue;
             }
 
             if (!risk) {
-                console.log(`Skipping item (missing Risk): id='${item.id}', title="${title}".`);
+                console.log("Skipping item: missing Risk.");
                 continue;
             }
 
             const estimate = computeEstimatedCost(size, risk);
 
             const existingEstimate = fields.find(f => f.field?.name.toLowerCase() === "estimation hack")?.number;
-            if (existingEstimate === estimate) {
-                console.log(`Estimation Hack unchanged (${estimate}), no update required: id='${item.id}', title="${title}".`);
+            const isUpdateNeeded = (existingEstimate === estimate);
+
+            console.log(`Exiting Estimate  ='${existingEstimate ?? "<not available>"}'.`);
+            console.log(`Computed Estimate ='${estimate ?? "<not available>"}'.`);
+            console.log(`Is Update Needed  ='${isUpdateNeeded}'.`);
+
+            if (isUpdateNeeded) {
+                console.log("Skipping update.");
                 continue;
             }
 
             await updateEstimationHack(projectId, item.id, estimationHackFieldId, estimate);
             countChangedItems++;
-            console.log(`Updated item Estimation Hack '${estimate}': id='${item.id}', title="${title}".`);
+
+            console.log(`Item #${countTotalItems} updated. This was update #${countChangedItems}.`);
             
         } catch(err) {
             countErrItems++;
-            console.log(`Error processing item id='${item.id}', title="${title}": "${err.message ?? err}"`);
+            console.log(`Error processing item id='${item.id}', title="${title}":`);
+            console.log(`ERROR: "${err.message ?? err}"`);
         }
     }
 
-    console.log(`Finished.`
+    console.log(`\nALL FINISHED.`
         + ` countTotalItems='${countTotalItems}';`
         + ` countChangedItems='${countChangedItems}';`
-        + ` countErrItems='${countErrItems}'`);
+        + ` countErrItems='${countErrItems}'.`);
 }
 
 main().catch(err => {
